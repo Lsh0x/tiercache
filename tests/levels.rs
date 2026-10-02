@@ -108,8 +108,9 @@ fn a_far_hit_fills_every_nearer_level_and_stops_there() {
     assert_eq!(near.calls(), ["get k", "put k"]);
     assert_eq!(mid.calls(), ["get k", "put k"]);
     assert_eq!(far.calls(), ["get k"]);
-    assert!(
-        beyond.calls().is_empty(),
+    assert_eq!(
+        beyond.calls(),
+        Vec::<String>::new(),
         "a level after the hit is never asked"
     );
 
@@ -202,7 +203,7 @@ fn caches_nest_and_an_empty_cache_never_hits() {
     assert_eq!(run(outer.get("k")).as_deref(), Some(&b"v"[..]));
 
     let empty = Cache::new(Vec::new());
-    assert!(empty.is_empty());
+    assert_eq!(empty.len(), 0);
     run(empty.put("k", b"v"));
     assert_eq!(run(empty.get("k")), None);
 }
@@ -307,7 +308,7 @@ fn keys_are_compared_exactly() {
 fn len_and_debug_describe_the_levels() {
     let cache = Cache::new(vec![Box::new(Lru::new(1)), Box::new(Lru::new(1))]);
     assert_eq!(cache.len(), 2);
-    assert!(!cache.is_empty());
+    assert_ne!(cache.len(), 0);
     assert_eq!(format!("{cache:?}"), "Cache { levels: 2, .. }");
 }
 

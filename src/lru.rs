@@ -150,7 +150,7 @@ mod tests {
         run(lru.put("a", b"1")).unwrap();
         run(lru.delete("a")).unwrap();
         run(lru.delete("never")).unwrap();
-        assert!(lru.is_empty());
+        assert_eq!(lru.len(), 0);
 
         let none = Lru::new(0);
         run(none.put("a", b"1")).unwrap();
