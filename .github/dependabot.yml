@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    ignore:
+      # dtolnay/rust-toolchain is pinned by Rust version, not by action
+      # version: `@1.85` is the MSRV the msrv job verifies, and `@stable`
+      # elsewhere. Dependabot reads those tags as versions to bump, which
+      # would silently retarget the MSRV check. Update the pin by hand when
+      # the MSRV changes, alongside rust-version in Cargo.toml.
+      - dependency-name: dtolnay/rust-toolchain

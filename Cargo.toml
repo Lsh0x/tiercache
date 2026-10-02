@@ -1,0 +1,22 @@
+[package]
+name = "tiercache"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "A key-value cache over an ordered list of stores you bring: memory, Redis, a database. Reads fall through and fill the nearer levels; writes and deletes reach every level."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Lsh0x/tiercache"
+documentation = "https://docs.rs/tiercache"
+readme = "README.md"
+keywords = ["cache", "multi-tier", "lru", "key-value", "async"]
+categories = ["caching", "asynchronous"]
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+
+[features]
+default = ["memory"]
+# The in-process LRU store. std only.
+memory = []

@@ -1,0 +1,9 @@
+/target
+
+# anatta substrate scaffold — local only, never committed
+/.claude/
+/.githooks/
+/.mcp.json
+/VERSION
+/.artifacts/
+/.a2m/
