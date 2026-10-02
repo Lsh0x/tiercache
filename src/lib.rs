@@ -19,6 +19,7 @@
 //! values are encoded is the caller's business.
 //!
 //! ```
+//! # #[cfg(feature = "memory")] {
 //! use tiercache::{Cache, Lru};
 //! # let rt = |f| tiercache::block_on_ready(f);
 //! let cache = Cache::new(vec![Box::new(Lru::new(1024))]);
@@ -26,6 +27,7 @@
 //!     cache.put("vi/niết bàn", b"[...]").await;
 //!     assert_eq!(cache.get("vi/niết bàn").await.as_deref(), Some(&b"[...]"[..]));
 //! });
+//! # }
 //! ```
 //!
 //! The crate has no runtime and no dependency: the futures are boxed std

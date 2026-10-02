@@ -1,5 +1,6 @@
 //! The level semantics of `Cache`: fall-through reads with fill-back, writes
 //! and deletes on every level, failures absorbed on reads and reported.
+#![cfg(feature = "memory")]
 
 use std::sync::{Arc, Mutex};
 
