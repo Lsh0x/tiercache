@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Maintained by [release-plz](https://release-plz.dev/) from
 [conventional commits](https://www.conventionalcommits.org/).
 
+## [0.1.1](https://github.com/Lsh0x/tiercache/compare/v0.1.0...v0.1.1) - 2026-10-02
+
+### Other
+
+- assert_eq/assert_ne instead of asserting is_empty ([#2](https://github.com/Lsh0x/tiercache/pull/2))
+
 ## [0.1.0] - Unreleased
 
 ### Added

@@ -1,6 +1,6 @@
 [package]
 name = "tiercache"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
 description = "A key-value cache over an ordered list of stores you bring: memory, Redis, a database. Reads fall through and fill the nearer levels; writes and deletes reach every level."
