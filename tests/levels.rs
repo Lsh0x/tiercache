@@ -205,3 +205,113 @@ fn caches_nest_and_an_empty_cache_never_hits() {
     run(empty.put("k", b"v"));
     assert_eq!(run(empty.get("k")), None);
 }
+
+#[test]
+fn a_failing_put_is_reported_and_the_other_levels_still_hold_the_value() {
+    let (a, broken, c) = (
+        Arc::new(Probe::default()),
+        Arc::new(Probe::failing()),
+        Arc::new(Probe::default()),
+    );
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let log = seen.clone();
+    let cache = Cache::new(levels(&[a.clone(), broken.clone(), c.clone()]))
+        .on_error(move |level, op, _| log.lock().unwrap().push((level, op)));
+    run(cache.put("k", b"v"));
+    assert!(run(a.inner.get("k")).unwrap().is_some());
+    assert!(run(c.inner.get("k")).unwrap().is_some());
+    assert_eq!(*seen.lock().unwrap(), [(1, Op::Put)]);
+}
+
+#[test]
+fn a_nested_cache_is_read_through_and_fills_the_outer_levels() {
+    let deep = Arc::new(Probe::default());
+    run(deep.inner.put("k", b"v")).unwrap();
+    let inner = Cache::new(levels(std::slice::from_ref(&deep)));
+    let near = Arc::new(Probe::default());
+    let outer = Cache::new(vec![Box::new(Shared(near.clone())), Box::new(inner)]);
+
+    assert_eq!(run(outer.get("k")).as_deref(), Some(&b"v"[..]));
+    assert_eq!(near.calls(), ["get k", "put k"]);
+    assert_eq!(run(outer.get("absent")), None);
+}
+
+#[test]
+fn a_nested_failed_delete_surfaces_as_the_outer_level_error() {
+    let inner = Cache::new(levels(&[Arc::new(Probe::failing())]));
+    let outer = Cache::new(vec![Box::new(Lru::new(4)), Box::new(inner)]);
+    let err = run(outer.delete("k")).unwrap_err();
+    assert_eq!(err.failures.len(), 1);
+    assert_eq!(
+        err.failures[0].0, 1,
+        "the nested cache is level 1 of the outer one"
+    );
+    let text = err.to_string();
+    assert!(text.contains("delete failed on 1 level(s)"), "{text}");
+    assert!(
+        text.contains("[0] store is down"),
+        "the inner failure is kept: {text}"
+    );
+}
+
+#[test]
+fn delete_error_is_a_std_error_with_every_failure() {
+    let cache = Cache::new(levels(&[
+        Arc::new(Probe::failing()),
+        Arc::new(Probe::failing()),
+    ]));
+    let err = run(cache.delete("k")).unwrap_err();
+    let boxed: BoxError = Box::new(err);
+    assert_eq!(
+        boxed.to_string(),
+        "delete failed on 2 level(s): [0] store is down; [1] store is down;"
+    );
+}
+
+#[test]
+fn without_a_hook_failures_are_still_absorbed() {
+    let cache = Cache::new(levels(&[
+        Arc::new(Probe::failing()),
+        Arc::new(Probe::default()),
+    ]));
+    run(cache.put("k", b"v"));
+    assert_eq!(run(cache.get("k")).as_deref(), Some(&b"v"[..]));
+}
+
+#[test]
+fn an_empty_value_is_a_hit_not_a_miss() {
+    let near = Arc::new(Probe::default());
+    let far = Arc::new(Probe::default());
+    run(far.inner.put("k", b"")).unwrap();
+    let cache = Cache::new(levels(&[near.clone(), far.clone()]));
+    assert_eq!(run(cache.get("k")), Some(Vec::new()));
+    assert_eq!(
+        near.calls(),
+        ["get k", "put k"],
+        "and it is filled back like any value"
+    );
+}
+
+#[test]
+fn keys_are_compared_exactly() {
+    let cache = Cache::new(vec![Box::new(Lru::new(8))]);
+    run(cache.put("vi/niết bàn", b"1"));
+    run(cache.put("vi/niết bàn ", b"2"));
+    assert_eq!(run(cache.get("vi/niết bàn")).as_deref(), Some(&b"1"[..]));
+    assert_eq!(run(cache.get("vi/niết bàn ")).as_deref(), Some(&b"2"[..]));
+    assert_eq!(run(cache.get("VI/niết bàn")), None);
+}
+
+#[test]
+fn len_and_debug_describe_the_levels() {
+    let cache = Cache::new(vec![Box::new(Lru::new(1)), Box::new(Lru::new(1))]);
+    assert_eq!(cache.len(), 2);
+    assert!(!cache.is_empty());
+    assert_eq!(format!("{cache:?}"), "Cache { levels: 2, .. }");
+}
+
+#[test]
+#[should_panic(expected = "was not ready")]
+fn block_on_ready_refuses_a_pending_future() {
+    run(std::future::pending::<()>());
+}

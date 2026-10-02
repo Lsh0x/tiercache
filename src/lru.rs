@@ -157,3 +157,118 @@ mod tests {
         assert_eq!(run(none.get("a")).unwrap(), None);
     }
 }
+
+#[cfg(test)]
+mod model {
+    //! `Lru` against the obvious model — a Vec ordered by last use — over
+    //! thousands of random operations, for several capacities.
+    use super::*;
+    use crate::block_on_ready as run;
+
+    /// xorshift64*: deterministic, no dependency.
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 >> 12;
+            self.0 ^= self.0 << 25;
+            self.0 ^= self.0 >> 27;
+            self.0.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        }
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    /// Most recently used last.
+    #[derive(Default)]
+    struct Model(Vec<(String, Vec<u8>)>);
+    impl Model {
+        fn get(&mut self, k: &str) -> Option<Vec<u8>> {
+            let i = self.0.iter().position(|(key, _)| key == k)?;
+            let e = self.0.remove(i);
+            let v = e.1.clone();
+            self.0.push(e);
+            Some(v)
+        }
+        fn put(&mut self, k: &str, v: &[u8], cap: usize) {
+            if cap == 0 {
+                return;
+            }
+            self.0.retain(|(key, _)| key != k);
+            self.0.push((k.to_owned(), v.to_vec()));
+            while self.0.len() > cap {
+                self.0.remove(0);
+            }
+        }
+        fn delete(&mut self, k: &str) {
+            self.0.retain(|(key, _)| key != k);
+        }
+    }
+
+    #[test]
+    fn behaves_like_the_model() {
+        for (seed, cap) in [(1u64, 0usize), (2, 1), (3, 2), (4, 7), (5, 64)] {
+            let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let lru = Lru::new(cap);
+            let mut model = Model::default();
+            for step in 0..5_000u32 {
+                let key = format!("k{}", rng.below(cap as u64 * 2 + 3));
+                match rng.below(10) {
+                    0..=4 => assert_eq!(
+                        run(lru.get(&key)).unwrap(),
+                        model.get(&key),
+                        "cap {cap}, step {step}, get {key}"
+                    ),
+                    5..=8 => {
+                        let v = step.to_le_bytes();
+                        run(lru.put(&key, &v)).unwrap();
+                        model.put(&key, &v, cap);
+                    }
+                    _ => {
+                        run(lru.delete(&key)).unwrap();
+                        model.delete(&key);
+                    }
+                }
+                assert_eq!(lru.len(), model.0.len(), "cap {cap}, step {step}");
+            }
+        }
+    }
+
+    #[test]
+    fn stays_bounded_and_consistent_under_threads() {
+        let lru = std::sync::Arc::new(Lru::new(50));
+        let threads: Vec<_> = (0..8u64)
+            .map(|t| {
+                let lru = lru.clone();
+                std::thread::spawn(move || {
+                    let mut rng = Rng(t + 1);
+                    for i in 0..2_000u64 {
+                        let key = format!("k{}", rng.below(200));
+                        match rng.below(3) {
+                            0 => {
+                                if let Some(v) = run(lru.get(&key)).unwrap() {
+                                    assert_eq!(v.len(), 8, "a value is never torn");
+                                }
+                            }
+                            1 => run(lru.put(&key, &i.to_le_bytes())).unwrap(),
+                            _ => run(lru.delete(&key)).unwrap(),
+                        }
+                        assert!(lru.len() <= 50);
+                    }
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        let inner = lru.lock();
+        assert_eq!(
+            inner.entries.len(),
+            inner.order.len(),
+            "map and order agree"
+        );
+        for (key, (_, used)) in &inner.entries {
+            assert_eq!(inner.order.get(used), Some(key));
+        }
+    }
+}
